@@ -7,7 +7,8 @@ const csvParser = require('csv-parser');
 const fs = require('fs');
 const Supplier = require('../models/supplier');
 const upload = multer({ dest: 'uploads/' });
-
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
 // Create Inventory Item with Supplier Link
 router.post('/', async (req, res) => {
@@ -79,23 +80,26 @@ router.get('/export', async (req, res) => {
   }
 });
 
-
-// CSV Import Route
-router.post('/import', upload.single('file'), (req, res) => { 
+// CSV Import Route (Using Memory Storage)
+router.post('/import', upload.single('file'), (req, res) => {
   const items = [];
+  const fileBuffer = req.file.buffer; // Get the file as a buffer
 
-  // Read and parse the uploaded CSV file
-  fs.createReadStream(req.file.path)
+  // Convert buffer to stream and parse CSV data
+  const stream = require('stream');
+  const readableStream = new stream.Readable();
+  readableStream.push(fileBuffer);
+  readableStream.push(null); // End the stream
+
+  readableStream
     .pipe(csvParser())
     .on('data', (data) => items.push(data))
     .on('end', async () => {
       try {
-        await Inventory.insertMany(items);  
+        await Inventory.insertMany(items);
         res.json({ message: 'Inventory imported successfully!' });
       } catch (err) {
         res.status(500).json({ error: err.message });
-      } finally {
-        fs.unlinkSync(req.file.path);  
       }
     });
 });
